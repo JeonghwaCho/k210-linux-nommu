@@ -21,3 +21,7 @@
 	status = "okay";
 };
 
+
+&dmac0 {
+	status = "okay";
+};

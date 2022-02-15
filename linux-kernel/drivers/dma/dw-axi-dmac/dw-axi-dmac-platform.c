@@ -27,6 +27,10 @@
 #include "../dmaengine.h"
 #include "../virt-dma.h"
 
+static void dmac_dump_chan_regs(struct axi_dma_chan *chan);
+static void axi_chan_list_dump_lli(struct axi_dma_chan *chan,
+				   struct axi_dma_desc *desc_head);
+
 /*
  * The set of bus widths supported by the DMA controller. DW AXI DMAC supports
  * master data bus width up to 512 bits (for both AXI master interfaces), but
@@ -297,6 +301,7 @@ static void axi_chan_block_xfer_start(struct axi_dma_chan *chan,
 
 	write_chan_llp(chan, first->vd.tx.phys | lms);
 
+	dmac_dump_chan_regs(chan);
 	irq_mask = DWAXIDMAC_IRQ_DMA_TRF | DWAXIDMAC_IRQ_ALL_ERR;
 	axi_chan_irq_sig_set(chan, irq_mask);
 
@@ -305,6 +310,8 @@ static void axi_chan_block_xfer_start(struct axi_dma_chan *chan,
 	axi_chan_irq_set(chan, irq_mask);
 
 	axi_chan_enable(chan);
+	dmac_dump_chan_regs(chan);
+	axi_chan_list_dump_lli(chan, first);
 }
 
 static void axi_chan_start_first_queued(struct axi_dma_chan *chan)
@@ -457,6 +464,10 @@ dma_chan_prep_dma_memcpy(struct dma_chan *dchan, dma_addr_t dst_adr,
 			xfer_len = max_block_ts << xfer_width;
 		}
 
+		pr_info("[DW-AXI_DMAC] [%s-%d] xfer_len %d, xfer_width %d, block_ts %d, max_block_ts %d\n",
+				__func__, __LINE__,
+				xfer_len, xfer_width, block_ts, max_block_ts);
+
 		desc = axi_desc_get(chan);
 		if (unlikely(!desc))
 			goto err_desc_get;
@@ -473,6 +484,10 @@ dma_chan_prep_dma_memcpy(struct dma_chan *dchan, dma_addr_t dst_adr,
 				burst_len << CH_CTL_H_ARLEN_POS |
 				CH_CTL_H_AWLEN_EN |
 				burst_len << CH_CTL_H_AWLEN_POS);
+			pr_info("[DW-AXI_DMAC] [%s-%d] axi_rw_burst_len %d, reg 0x%x\n",
+				__func__, __LINE__,
+				burst_len, reg);
+
 		}
 		desc->lli.ctl_hi = cpu_to_le32(reg);
 
@@ -528,6 +543,36 @@ static void axi_chan_dump_lli(struct axi_dma_chan *chan,
 		le32_to_cpu(desc->lli.block_ts_lo),
 		le32_to_cpu(desc->lli.ctl_hi),
 		le32_to_cpu(desc->lli.ctl_lo));
+}
+
+static void dmac_dump_chan_regs(struct axi_dma_chan *chan)
+{
+	pr_info("---------------------------------------\n");
+	/* CHENREG */
+	pr_info("COMMON - CHEN_L 0x%llx CHEN_H 0x%llx\n",
+			axi_dma_ioread32(chan->chip, DMAC_CHEN_L),
+			axi_dma_ioread32(chan->chip, DMAC_CHEN_H));
+	/* REGS/ID */
+	pr_info("BASE_REG 0x%llx ID %d\n",
+			chan->chan_regs, chan->id);
+	/* SAR/DAR */
+	pr_info("SAR 0x%llx DAR 0x%llx BLOCK_TS %d\n",
+			axi_chan_ioread32(chan, CH_SAR),
+			axi_chan_ioread32(chan, CH_DAR),
+			axi_chan_ioread32(chan, CH_BLOCK_TS));
+	/* CTL/CFG/CFG2 */
+	pr_info("CTL_L 0x%llx CTL_H 0x%llx CFG_L 0x%llx CFG_H %llx\n",
+			axi_chan_ioread32(chan, CH_CTL_L),
+			axi_chan_ioread32(chan, CH_CTL_H),
+			axi_chan_ioread32(chan, CH_CFG_L),
+			axi_chan_ioread32(chan, CH_CFG_H));
+	/* LLP */
+	pr_info("LLP 0x%llx\n",
+			axi_chan_ioread32(chan, CH_LLP));
+	/* Status */
+	pr_info("STATUSREG 0x%llx\n",
+			axi_chan_ioread32(chan, CH_STATUS));
+	pr_info("---------------------------------------\n");
 }
 
 static void axi_chan_list_dump_lli(struct axi_dma_chan *chan,
@@ -602,6 +647,7 @@ static irqreturn_t dw_axi_dma_interrupt(int irq, void *dev_id)
 
 	/* Disable DMAC inerrupts. We'll enable them after processing chanels */
 	axi_dma_irq_disable(chip);
+//	dmac_dump_chan_regs(chan);
 
 	/* Poll, clear and process every chanel interrupt status */
 	for (i = 0; i < dw->hdata->nr_channels; i++) {

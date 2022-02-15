@@ -119,5 +119,21 @@
 			interrupts = <33>;
 			clocks = <&sysctl 0>;
 		};
+
+		dmac0: dma-controller@50000000 {
+			compatible = "snps,axi-dma-1.01a";
+			reg = <0x50000000 0x1000>;
+			interrupts = <27 28 29 30 31 32>;
+			#dma-cells = <1>;
+			clocks = <&sysctl 4>, <&sysctl 4>;
+			clock-names = "core-clk", "cfgr-clk";
+			dma-channels = <6>;
+			snps,dma-masters = <2>;
+			snps,priority = <0 1 2 3 4 5>;
+			snps,data-width = <5>;
+			snps,block-size = <0x200000 0x200000 0x200000
+					   0x200000 0x200000 0x200000>;
+			snps,axi-max-burst-len = <256>;
+		};
 	};
 };
